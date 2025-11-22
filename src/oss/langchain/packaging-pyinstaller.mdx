@@ -102,14 +102,20 @@ export TMPDIR=/path/to/larger/partition/tmp
 pyinstaller --onedir your_app.py
 ```
 
-3. **Clean up system temporary files:**
+3. **Clean up PyInstaller temporary files:**
 
 ```bash
-# On Linux/macOS
-sudo rm -rf /tmp/*
+# On Linux/macOS - only remove PyInstaller temp directories
+find /tmp -name '_MEI*' -type d -exec rm -rf {} + 2>/dev/null || true
+find /tmp -name 'pyinstaller-*' -type d -exec rm -rf {} + 2>/dev/null || true
 
-# On Windows (run in elevated command prompt)
-del /q /f /s %TEMP%\*
+# On Windows (run in command prompt)
+# List PyInstaller temp files first to verify before deletion
+dir %TEMP%\_MEI* /s /b
+dir %TEMP%\pyinstaller* /s /b
+# Then delete if safe
+for /d %i in (%TEMP%\_MEI*) do @rmdir /s /q "%i"
+for /d %i in (%TEMP%\pyinstaller*) do @rmdir /s /q "%i"
 ```
 
 4. **Use `--onefile` instead of `--onedir`:**
@@ -214,9 +220,9 @@ pyinstaller --debug all your_app.py
 # Clean previous builds
 rm -rf build/ dist/
 
-# Set environment
-export TMPDIR=/tmp/pyinstaller_build
-mkdir -p $TMPDIR
+# Set environment - use system TMPDIR if set, otherwise use /tmp
+export TMPDIR="${TMPDIR:-/tmp}/pyinstaller_build"
+mkdir -p "$TMPDIR"
 
 # Build with all LangChain dependencies
 pyinstaller \
@@ -234,7 +240,7 @@ pyinstaller \
     app.py
 
 # Cleanup
-rm -rf $TMPDIR
+rm -rf "$TMPDIR"
 echo "Build complete! Check dist/my_langchain_app/"
 ```
 
