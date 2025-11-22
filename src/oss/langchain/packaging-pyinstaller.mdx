@@ -213,6 +213,8 @@ pyinstaller --debug all your_app.py
 
 ## Example: Complete Build Script
 
+Here's a complete build script for Unix-like systems (Linux, macOS):
+
 ```bash
 #!/bin/bash
 # build_langchain_app.sh
@@ -242,6 +244,39 @@ pyinstaller \
 # Cleanup
 rm -rf "$TMPDIR"
 echo "Build complete! Check dist/my_langchain_app/"
+```
+
+For Windows, use a batch script instead:
+
+```batch
+@echo off
+REM build_langchain_app.bat
+
+REM Clean previous builds
+rmdir /s /q build dist 2>nul
+
+REM Set environment
+set TMPDIR=%TEMP%\pyinstaller_build
+mkdir "%TMPDIR%" 2>nul
+
+REM Build with all LangChain dependencies
+pyinstaller ^
+    --name my_langchain_app ^
+    --onedir ^
+    --hidden-import=langchain ^
+    --hidden-import=langchain_community ^
+    --hidden-import=langchain_core ^
+    --hidden-import=langchain_openai ^
+    --collect-data langchain ^
+    --collect-data langchain_community ^
+    --add-data "config.yaml;." ^
+    --add-data ".env;." ^
+    --clean ^
+    app.py
+
+REM Cleanup
+rmdir /s /q "%TMPDIR%" 2>nul
+echo Build complete! Check dist\my_langchain_app\
 ```
 
 ## Additional Resources
