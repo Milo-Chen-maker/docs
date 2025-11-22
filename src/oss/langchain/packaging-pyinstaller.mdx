@@ -1,0 +1,286 @@
+---
+title: Packaging with PyInstaller
+sidebarTitle: PyInstaller Packaging
+---
+
+This guide explains how to package LangChain applications as standalone executables using PyInstaller and troubleshoot common issues.
+
+## Overview
+
+PyInstaller allows you to bundle your LangChain application and its dependencies into a single executable file or directory. This is useful for:
+
+- Distributing applications to users without Python installed
+- Creating deployable packages for production environments
+- Simplifying deployment on systems with restricted internet access
+
+## Prerequisites
+
+Before packaging your LangChain application, ensure you have:
+
+* Python 3.8 or later installed
+* PyInstaller installed: `pip install pyinstaller`
+* A working LangChain application
+* All required dependencies installed in your environment
+
+## Basic Usage
+
+To package a LangChain application:
+
+```bash
+# Single file executable
+pyinstaller --onefile your_app.py
+
+# Directory with executable and dependencies
+pyinstaller --onedir your_app.py
+```
+
+## LangChain-Specific Considerations
+
+When packaging LangChain applications, you may need to include additional data files and hidden imports:
+
+```bash
+pyinstaller --onedir \
+    --hidden-import=langchain \
+    --hidden-import=langchain_community \
+    --hidden-import=langchain_core \
+    --collect-data langchain \
+    --collect-data langchain_community \
+    your_app.py
+```
+
+### Common Hidden Imports
+
+Depending on which LangChain components you use, you may need to add:
+
+```python
+# For OpenAI integration
+--hidden-import=langchain_openai
+
+# For Anthropic integration
+--hidden-import=langchain_anthropic
+
+# For vector stores
+--hidden-import=langchain_chroma
+--hidden-import=langchain_pinecone
+
+# For document loaders
+--hidden-import=langchain_community.document_loaders
+```
+
+## Troubleshooting
+
+### No Space Left on Device
+
+**Error:**
+```
+OSError: [Errno 28] No space left on device
+```
+
+**Cause:** PyInstaller runs out of disk space while creating the bundle. This typically occurs when:
+- The system's temporary directory is on a partition with limited space
+- The application has many large dependencies
+- Previous failed builds have consumed disk space
+
+**Solutions:**
+
+1. **Check and free up disk space:**
+
+```bash
+# Check disk usage
+df -h
+
+# Remove old PyInstaller build artifacts
+rm -rf build/ dist/ __pycache__/
+find . -name "*.pyc" -delete
+```
+
+2. **Use a different temporary directory:**
+
+```bash
+# Set TMPDIR to a location with more space
+export TMPDIR=/path/to/larger/partition/tmp
+pyinstaller --onedir your_app.py
+```
+
+3. **Clean up PyInstaller temporary files:**
+
+```bash
+# On Linux/macOS - only remove PyInstaller temp directories
+find /tmp -name '_MEI*' -type d -exec rm -rf {} + 2>/dev/null || true
+find /tmp -name 'pyinstaller-*' -type d -exec rm -rf {} + 2>/dev/null || true
+
+# On Windows (run in command prompt)
+# List PyInstaller temp files first to verify before deletion
+dir %TEMP%\_MEI* /s /b
+dir %TEMP%\pyinstaller* /s /b
+# Then delete if safe
+for /d %i in (%TEMP%\_MEI*) do @rmdir /s /q "%i"
+for /d %i in (%TEMP%\pyinstaller*) do @rmdir /s /q "%i"
+```
+
+4. **Use `--onefile` instead of `--onedir`:**
+
+The `--onefile` option creates a smaller output (single executable instead of a directory with many files):
+
+```bash
+pyinstaller --onefile your_app.py
+```
+
+5. **Exclude unnecessary dependencies:**
+
+Create a `.spec` file to have more control over what's included:
+
+```python
+# your_app.spec
+a = Analysis(
+    ['your_app.py'],
+    excludes=['matplotlib', 'numpy', 'pandas'],  # Exclude if not needed
+    ...
+)
+```
+
+Then build with: `pyinstaller your_app.spec`
+
+### Missing Dependencies
+
+**Error:**
+```
+ModuleNotFoundError: No module named 'xxx'
+```
+
+**Solution:** Add hidden imports explicitly:
+
+```bash
+pyinstaller --hidden-import=xxx your_app.py
+```
+
+Or in your `.spec` file:
+
+```python
+a = Analysis(
+    ['your_app.py'],
+    hiddenimports=['xxx', 'yyy', 'zzz'],
+    ...
+)
+```
+
+### Large Executable Size
+
+If your executable is too large:
+
+1. **Use `--exclude-module` to remove unnecessary packages:**
+
+```bash
+pyinstaller --exclude-module pytest --exclude-module sphinx your_app.py
+```
+
+2. **Use UPX compression** (if available):
+
+```bash
+pyinstaller --upx-dir=/path/to/upx your_app.py
+```
+
+3. **Consider using virtual environments** to minimize included dependencies
+
+### Runtime Errors
+
+**Issue:** Application works in Python but fails when packaged
+
+**Solutions:**
+
+1. **Check for dynamic imports:** PyInstaller cannot detect imports that happen at runtime
+2. **Include data files explicitly:**
+
+```bash
+pyinstaller --add-data "config.yaml:." your_app.py
+```
+
+3. **Test in a clean environment** before packaging
+4. **Use `--debug all` for detailed error information:**
+
+```bash
+pyinstaller --debug all your_app.py
+```
+
+## Best Practices
+
+1. **Test early and often:** Package and test your application regularly during development
+2. **Use virtual environments:** Keep your dependencies minimal and well-defined
+3. **Version control your .spec file:** This allows for consistent builds across environments
+4. **Document system requirements:** Note any system-specific dependencies (e.g., SSL certificates, system libraries)
+5. **Monitor build size:** Large builds may indicate unnecessary dependencies
+6. **Clean builds:** Remove `build/` and `dist/` directories between builds to avoid stale artifacts
+
+## Example: Complete Build Script
+
+Here's a complete build script for Unix-like systems (Linux, macOS):
+
+```bash
+#!/bin/bash
+# build_langchain_app.sh
+
+# Clean previous builds
+rm -rf build/ dist/
+
+# Set environment - use system TMPDIR if set, otherwise use /tmp
+export TMPDIR="${TMPDIR:-/tmp}/pyinstaller_build"
+mkdir -p "$TMPDIR"
+
+# Build with all LangChain dependencies
+pyinstaller \
+    --name my_langchain_app \
+    --onedir \
+    --hidden-import=langchain \
+    --hidden-import=langchain_community \
+    --hidden-import=langchain_core \
+    --hidden-import=langchain_openai \
+    --collect-data langchain \
+    --collect-data langchain_community \
+    --add-data "config.yaml:." \
+    --add-data ".env:." \
+    --clean \
+    app.py
+
+# Cleanup
+rm -rf "$TMPDIR"
+echo "Build complete! Check dist/my_langchain_app/"
+```
+
+For Windows, use a batch script instead:
+
+```batch
+@echo off
+REM build_langchain_app.bat
+
+REM Clean previous builds
+rmdir /s /q build dist 2>nul
+
+REM Set environment
+set TMPDIR=%TEMP%\pyinstaller_build
+mkdir "%TMPDIR%" 2>nul
+
+REM Build with all LangChain dependencies
+pyinstaller ^
+    --name my_langchain_app ^
+    --onedir ^
+    --hidden-import=langchain ^
+    --hidden-import=langchain_community ^
+    --hidden-import=langchain_core ^
+    --hidden-import=langchain_openai ^
+    --collect-data langchain ^
+    --collect-data langchain_community ^
+    --add-data "config.yaml;." ^
+    --add-data ".env;." ^
+    --clean ^
+    app.py
+
+REM Cleanup
+rmdir /s /q "%TMPDIR%" 2>nul
+echo Build complete! Check dist\my_langchain_app\
+```
+
+## Additional Resources
+
+- [PyInstaller Documentation](https://pyinstaller.org/)
+- [LangChain Installation Guide](/oss/langchain/install)
+- [Deployment Best Practices](/oss/langchain/deploy)
